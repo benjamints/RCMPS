@@ -1,0 +1,6 @@
+docs/build
+Manifest.toml
+LocalPreferences.toml
+.vscode
+.DS_Store
+**/dev/
