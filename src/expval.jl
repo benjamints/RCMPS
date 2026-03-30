@@ -35,7 +35,7 @@ function ϕnDer(ψ::LeftGaugedRCMPS, n::Int64)
     # solρ = integrateODE(ϕnsys!, vec(v0), (ψ.Q, ψ.R, ψ.rFP, dim), true)
     # solO = integrateODE(ϕnsys!, vec(v0), (ψ.Q', ψ.R', ψ.lFP, dim), true)
 
-    M, _ = quadde(-integration_limit, 0, integration_limit) do x
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -92,7 +92,7 @@ function aZDer(ψ::LeftGaugedRCMPS)
     dim = (bonddim(ψ), bonddim(ψ), 3)
     solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.R', ψ.lFP, dim))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -121,7 +121,7 @@ function aYDer(ψ::LeftGaugedRCMPS)
     # solO = integrateODE(a11sys!, vec(v0), (ψ.Q', ψ.R', A', ψ.lFP, dim), true)
 
 
-    M, ee = quadde(-integration_limit, 0, integration_limit) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -178,7 +178,7 @@ function expϕDer(ψ::LeftGaugedRCMPS, β::Float64)
     dim = (bonddim(ψ), bonddim(ψ))
     solρ, solO = integrateSol(expϕsys!, dim, (ψ.Q, ψ.R, β, dim), (ψ.Q', ψ.R', -β, dim), ψ.rFP, ψ.lFP)
 
-    M, _ = quadde(-integration_limit, 0, integration_limit) do x
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
         j = J(x)

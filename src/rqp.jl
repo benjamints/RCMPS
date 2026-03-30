@@ -63,7 +63,7 @@ function ϕnH(ψ::LeftGaugedRCMPS, n::Int64, k::Float64, solρ, solO, W::Array{C
 
     VEV = tr(view(reshape(solρ(integration_limit), dim), :, :, n))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -114,7 +114,7 @@ function aZH(ψ::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2
     # return solρW, solOW
     VEV = tr(view(reshape(solρ(integration_limit), dim), :, :, 3))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -154,7 +154,7 @@ function aYH(ψ::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2
     # return solρW, solOW
     VEV = tr(view(reshape(solρ(integration_limit), dim), :, :, 3))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -212,7 +212,7 @@ function expϕH(ψ::LeftGaugedRCMPS, β::Float64, k::Float64, solρ, solO, W::Ar
 
     VEV = tr(view(reshape(solρ(integration_limit), dim), :, :))
 
-    M, _ = quadde(-integration_limit, 0, integration_limit) do x
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
         ρxW = reshape(solρW(x), dim)

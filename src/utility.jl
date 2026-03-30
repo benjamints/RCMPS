@@ -47,7 +47,7 @@ function integrateSol(sys!, dim, pρ, pO, ρ0=zeros(ComplexF64, dim), O0=zeros(C
     return solρ, solO
 end
 
-function gdlinesearch(f, fg, x0, inner, retract; c=1e-3, α0=1., fac=0.5, maxiter=100, gradtol=1e-3, verbose=false, update_cycle=6)
+function gdlinesearch(f, fg, x0, inner, retract; c=1e-3, α0=1., fac=0.5, maxiter=100, gradtol=1e-3, verbose=false)
     x = x0
     fval = 0.0
 

@@ -17,7 +17,8 @@ export ϕnVEV, ϕnDer, a11VEV, aZDer, aYDer, expϕVEV, expϕDer
 export ϕnH, aZH, aYH, expϕH
 
 const integration_limit = 25
-const ode_tol = 1e-12
+const ode_tol = 1e-16
+const int_tol = 1e-14
 
 include("utility.jl")
 include("states.jl")
