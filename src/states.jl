@@ -23,10 +23,16 @@ end
 bonddim(ψ::LeftGaugedRCMPS) = size(ψ.Q, 1)
 
 function rightFP(Q, R)
-    vals, vecs, info = eigsolve(u -> Q * u + u * Q' + R * u * R', randn(eltype(Q), size(Q)), 1, :LR)
-    @assert info.converged > 0 "Right fixed point did not converge"
+    # vals, vecs, info = eigsolve(u -> Q * u + u * Q' + R * u * R', randn(eltype(Q), size(Q)), 1, :LR)
+    # @assert info.converged > 0 "Right fixed point did not converge"
 
-    vecs[1] ./= tr(vecs[1])
+    # vecs[1] ./= tr(vecs[1])
 
-    return vals[1], vecs[1]
+    # return vals[1], vecs[1]
+    T = kron(I(size(Q, 1)), Q) + kron(conj(Q), I(size(Q, 1))) + kron(conj(R), R)
+    _, S, V = svd(T)
+    ρ = reshape(V[:, end], size(Q, 1), size(Q, 1))
+    ρ = ρ' + ρ
+    ρ /= tr(ρ)
+    return S[end], ρ
 end
