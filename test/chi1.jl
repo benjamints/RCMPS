@@ -56,21 +56,21 @@ using LinearAlgebra
         for k = [0.0, 0.4, 1.0]
             for n in 1:5
                 dim = (bonddim(ψ), bonddim(ψ), n)
-                solρ, solO = integrateSol(ϕnsys!, dim, (ψ.Q, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.lFP, dim))
+                solρ, solO = integrateSol(ϕnsys!, dim, (ψ.Q, ψ.R, ψ.Q, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.Q', ψ.R', ψ.lFP, dim))
                 Wp = ϕnH(ψ, n, k, solρ, solO, W)
 
                 @test Wp[1] ≈ n * (n - 1) / (2 * ω(k)) * 2^(n / 2 - 1) * real(ψ.R[1])^(n - 2) atol = 1e-2
             end
 
             dim = (bonddim(ψ), bonddim(ψ), 3)
-            solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.R', ψ.lFP, dim))
+            solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, ψ.R, ψ.Q, ψ.R, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.R', ψ.Q', ψ.R', ψ.R', ψ.lFP, dim))
             Wp = aZH(ψ, k, solρ, solO, W)
 
             @test Wp[1] ≈ 1 / (2 * ω(k)) atol = 1e-2
 
             for β = [0.5, 1.0, 2.0]
                 dim = (bonddim(ψ), bonddim(ψ))
-                solρ, solO = integrateSol(expϕsys!, dim, (ψ.Q, ψ.R, β, dim), (ψ.Q', ψ.R', -β, dim), ψ.rFP, ComplexF64.(I(bonddim(ψ))))
+                solρ, solO = integrateSol(expϕsys!, dim, (ψ.Q, ψ.R, ψ.Q, ψ.R, β, dim), (ψ.Q', ψ.R', ψ.Q', ψ.R', -β, dim), ψ.rFP, ComplexF64.(I(bonddim(ψ))))
                 Wp = expϕH(ψ, β, k, solρ, solO, W)
 
                 @test Wp[1] ≈ -β^2 / (2 * ω(k)) * cis(sqrt(2) * β * real(ψ.R[1])) atol = 1e-2

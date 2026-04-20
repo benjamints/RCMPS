@@ -1,16 +1,16 @@
 # ϕ^n VEV
 function ϕnsys!(du, u, p, x, affine=true)
-    Q, R, FP, dims = p
+    QL, RL, QR, RR, FP, dims = p
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
     j = J(x)
 
     for n in axes(ρ, 3)
-        dρ[:, :, n] .= Q * ρ[:, :, n] + ρ[:, :, n] * Q' + R * ρ[:, :, n] * R'
+        dρ[:, :, n] .= QL * ρ[:, :, n] + ρ[:, :, n] * QR' + RL * ρ[:, :, n] * RR'
         if n == 1 && affine
-            dρ[:, :, n] .+= j * (R * FP + FP * R')
+            dρ[:, :, n] .+= j * (RL * FP + FP * RR')
         elseif n > 1
-            dρ[:, :, n] .+= n * j * (R * ρ[:, :, n-1] + ρ[:, :, n-1] * R')
+            dρ[:, :, n] .+= n * j * (RL * ρ[:, :, n-1] + ρ[:, :, n-1] * RR')
         end
     end
     nothing
@@ -20,7 +20,7 @@ function ϕnVEV(ψ::LeftGaugedRCMPS, n::Int64)
     dim = (bonddim(ψ), bonddim(ψ), n)
     v0 = zeros(ComplexF64, dim)
 
-    p = (ψ.Q, ψ.R, ψ.rFP, dim)
+    p = (ψ.Q, ψ.R, ψ.Q, ψ.R, ψ.rFP, dim)
     sol = integrateODE(ϕnsys!, vec(v0), p)
     ρ = reshape(sol, dim)
     return tr(ρ[:, :, end])
@@ -28,14 +28,14 @@ end
 
 function ϕnDer(ψ::LeftGaugedRCMPS, n::Int64)
     dim = (bonddim(ψ), bonddim(ψ), n)
-    solρ, solO = integrateSol(ϕnsys!, dim, (ψ.Q, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.lFP, dim))
+    solρ, solO = integrateSol(ϕnsys!, dim, (ψ.Q, ψ.R, ψ.Q, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.Q', ψ.R', ψ.lFP, dim))
 
     # v0 = zeros(ComplexF64, dim)
 
     # solρ = integrateODE(ϕnsys!, vec(v0), (ψ.Q, ψ.R, ψ.rFP, dim), true)
     # solO = integrateODE(ϕnsys!, vec(v0), (ψ.Q', ψ.R', ψ.lFP, dim), true)
 
-    M, _ = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -69,19 +69,19 @@ end
 # H_fb
 # Order (n,m) = 01, 10, 11
 function a11sys!(du, u, p, x, affine=true)
-    Q, R, A, FP, dims = p
+    QL, RL, AL, QR, RR, AR, FP, dims = p
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
     j = J(x)
 
     for n in 1:3
-        dρ[:, :, n] .= Q * ρ[:, :, n] + ρ[:, :, n] * Q' + R * ρ[:, :, n] * R'
+        dρ[:, :, n] .= QL * ρ[:, :, n] + ρ[:, :, n] * QR' + RL * ρ[:, :, n] * RR'
         if n == 1 && affine
-            dρ[:, :, n] .+= j * FP * A'
+            dρ[:, :, n] .+= j * FP * AR'
         elseif n == 2 && affine
-            dρ[:, :, n] .+= j * A * FP
+            dρ[:, :, n] .+= j * AL * FP
         elseif n > 2
-            dρ[:, :, n] .+= j * A * ρ[:, :, 1] + j * ρ[:, :, 2] * A'
+            dρ[:, :, n] .+= j * AL * ρ[:, :, 1] + j * ρ[:, :, 2] * AR'
         end
     end
     nothing
@@ -90,9 +90,9 @@ end
 
 function aZDer(ψ::LeftGaugedRCMPS)
     dim = (bonddim(ψ), bonddim(ψ), 3)
-    solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.R', ψ.lFP, dim))
+    solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, ψ.R, ψ.Q, ψ.R, ψ.R, ψ.rFP, dim), (ψ.Q', ψ.R', ψ.R', ψ.Q', ψ.R', ψ.R', ψ.lFP, dim))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -114,14 +114,14 @@ function aYDer(ψ::LeftGaugedRCMPS)
     A = CC(ψ.Q, ψ.R)
 
     dim = (bonddim(ψ), bonddim(ψ), 3)
-    solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, A, ψ.rFP, dim), (ψ.Q', ψ.R', A', ψ.lFP, dim))
+    solρ, solO = integrateSol(a11sys!, dim, (ψ.Q, ψ.R, A, ψ.Q, ψ.R, A, ψ.rFP, dim), (ψ.Q', ψ.R', A', ψ.Q', ψ.R', A', ψ.lFP, dim))
     # v0 = zeros(ComplexF64, dim)
 
     # solρ = integrateODE(a11sys!, vec(v0), (ψ.Q, ψ.R, A, ψ.rFP, dim), true)
     # solO = integrateODE(a11sys!, vec(v0), (ψ.Q', ψ.R', A', ψ.lFP, dim), true)
 
 
-    M, ee = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
+    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         sum = zero(ψ.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
@@ -144,7 +144,7 @@ function a11VEV(ψ::LeftGaugedRCMPS, A::Array{ComplexF64,2})
     dim = (bonddim(ψ), bonddim(ψ), 3)
     v0 = zeros(ComplexF64, dim)
 
-    p = (ψ.Q, ψ.R, A, ψ.rFP, dim)
+    p = (ψ.Q, ψ.R, A, ψ.Q, ψ.R, A, ψ.rFP, dim)
     sol = integrateODE(a11sys!, vec(v0), p)
     ρ = reshape(sol, dim)
     return tr(ρ[:, :, end])
@@ -153,13 +153,13 @@ end
 #vertex op
 
 function expϕsys!(du, u, p, x, affine=true)
-    Q, R, β, dims = p
+    QL, RL, QR, RR, β, dims = p
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
     j = J(x)
 
-    dρ[:, :] .= Q * ρ[:, :] + ρ[:, :] * Q' + R * ρ[:, :] * R' +
-                im * β * j * (R * ρ[:, :] + ρ[:, :] * R')
+    dρ[:, :] .= QL * ρ[:, :] + ρ[:, :] * QR' + RL * ρ[:, :] * RR' +
+                im * β * j * (RL * ρ[:, :] + ρ[:, :] * RR')
 
     nothing
 end
@@ -168,7 +168,7 @@ function expϕVEV(ψ::LeftGaugedRCMPS, β::Float64)
     dim = (bonddim(ψ), bonddim(ψ))
     v0 = ψ.rFP
 
-    p = (ψ.Q, ψ.R, β, dim)
+    p = (ψ.Q, ψ.R, ψ.Q, ψ.R, β, dim)
     sol = integrateODE(expϕsys!, vec(v0), p)
     ρ = reshape(sol, dim)
     return tr(ρ[:, :])
@@ -176,9 +176,9 @@ end
 
 function expϕDer(ψ::LeftGaugedRCMPS, β::Float64)
     dim = (bonddim(ψ), bonddim(ψ))
-    solρ, solO = integrateSol(expϕsys!, dim, (ψ.Q, ψ.R, β, dim), (ψ.Q', ψ.R', -β, dim), ψ.rFP, ψ.lFP)
+    solρ, solO = integrateSol(expϕsys!, dim, (ψ.Q, ψ.R, ψ.Q, ψ.R, β, dim), (ψ.Q', ψ.R', ψ.Q', ψ.R', -β, dim), ψ.rFP, ψ.lFP)
 
-    M, _ = quadde(-integration_limit, 0, integration_limit; rtol = int_tol) do x
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
         j = J(x)

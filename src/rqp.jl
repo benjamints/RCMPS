@@ -1,6 +1,6 @@
 function ϕnWsys!(du, u, p, x, affine=true)
-    Q, R, FP, dims, dQ, dR, FPW, k, solρ = p
-    ϕnsys!(du, u, (Q, R, FPW, dims), x, affine)
+    QL, RL, QR, RR, FP, dims, dQ, dR, FPW, k, solρ = p
+    ϕnsys!(du, u, (QL, RL, QR, RR, FPW, dims), x, affine)
 
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
@@ -12,7 +12,7 @@ function ϕnWsys!(du, u, p, x, affine=true)
         j = J(x)
 
         for n in axes(ρ, 3)
-            dρ[:, :, n] .+= dQ * ρ0[:, :, n] + dR * ρ0[:, :, n] * R'
+            dρ[:, :, n] .+= dQ * ρ0[:, :, n] + dR * ρ0[:, :, n] * RR'
             if n == 1
                 dρ[:, :, n] .+= n * j * dR * FP
             else
@@ -24,8 +24,8 @@ function ϕnWsys!(du, u, p, x, affine=true)
 end
 
 function a11Wsys!(du, u, p, x, affine=true)
-    Q, R, A, FP, dims, dQ, dR, FPW, dA, k, solρ = p
-    a11sys!(du, u, (Q, R, A, FPW, dims), x, affine)
+    QL, RL, AL, QR, RR, AR, FP, dims, dQ, dR, dA, FPW, k, solρ = p
+    a11sys!(du, u, (QL, RL, AL, QR, RR, AR, FPW, dims), x, affine)
 
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
@@ -37,7 +37,7 @@ function a11Wsys!(du, u, p, x, affine=true)
         j = J(x)
 
         for n in 1:3
-            dρ[:, :, n] .+= dQ * ρ0[:, :, n] + dR * ρ0[:, :, n] * R'
+            dρ[:, :, n] .+= dQ * ρ0[:, :, n] + dR * ρ0[:, :, n] * RR'
         end
         dρ[:, :, 2] .+= j * dA * FP
         dρ[:, :, 3] .+= j * dA * ρ0[:, :, 1]
@@ -45,26 +45,35 @@ function a11Wsys!(du, u, p, x, affine=true)
     nothing
 end
 
-function solveFPW(ψ::LeftGaugedRCMPS, k, W::Array{ComplexF64,2})
-    b = ψ.R' * W * ψ.rFP - W * ψ.rFP * ψ.R'
-    rFPW, _ = linsolve(u -> ψ.Q * u + u * ψ.Q' + ψ.R * u * ψ.R' - im * k * u + ψ.rFP * tr(u), b)
+solveFPW(ψL::LeftGaugedRCMPS, k, W::Array{ComplexF64,2}) = solveFPW(ψL, ψL, k, W, true)
+
+function solveFPW(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, k, W::Array{ComplexF64,2}, reg=false)
+    b = ψL.R' * W * ψR.rFP - W * ψR.rFP * ψR.R'
+    if reg
+        rFPW, _ = linsolve(u -> ψL.Q * u + u * ψR.Q' + ψL.R * u * ψR.R' - im * k * u + ψL.rFP * tr(u), b)
+    else
+        rFPW, _ = linsolve(u -> ψL.Q * u + u * ψR.Q' + ψL.R * u * ψR.R' - im * k * u, b)
+    end
     return rFPW
 end
 
-function ϕnH(ψ::LeftGaugedRCMPS, n::Int64, k::Float64, solρ, solO, W::Array{ComplexF64,2})
-    rFPW = solveFPW(ψ, k, W)
+ϕnH(ψL::LeftGaugedRCMPS, n::Int64, k::Float64, solρ, solO, W::Array{ComplexF64,2}) = ϕnH(ψL, ψL, n, k, solρ, solO, W)
 
-    dim = (bonddim(ψ), bonddim(ψ), n)
+function ϕnH(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, n::Int64, k::Float64, solρ, solO, W::Array{ComplexF64,2})
+    rFPW = solveFPW(ψL, ψR, k, W)
 
-    dQ = -ψ.R' * W
+    dim = (bonddim(ψR), bonddim(ψR), n)
+
+    dQ = -ψL.R' * W
     dR = W
 
-    solρW, solOW = integrateSol(ϕnWsys!, dim, (ψ.Q, ψ.R, ψ.rFP, dim, dQ, dR, rFPW, k, solρ), (ψ.Q', ψ.R', ψ.lFP, dim, dQ', dR', 0 * rFPW, k, solO))
+    solρW, solOW = integrateSol(ϕnWsys!, dim, (ψL.Q, ψL.R, ψR.Q, ψR.R, ψR.rFP, dim, dQ, dR, rFPW, k, solρ), (ψR.Q', ψR.R', ψL.Q', ψL.R', ψL.lFP, dim, dQ', dR', 0 * rFPW, k, solO))
 
-    VEV = tr(view(reshape(solρ(integration_limit), dim), :, :, n))
+    VEVR = tr(view(reshape(solρ(integration_limit), dim), :, :, n))
+    VEVL = tr(view(reshape(solO(integration_limit), dim), :, :, n)' * ψL.rFP)
 
     M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
-        sum = zero(ψ.K)
+        sum = zero(ψL.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
         ρxW = reshape(solρW(x), dim)
@@ -72,19 +81,19 @@ function ϕnH(ψ::LeftGaugedRCMPS, n::Int64, k::Float64, solρ, solO, W::Array{C
         j = J(x)
 
         #m is # b derivatives on O
-        sum .+= -ψ.R * (OxW[:, :, n]' * ψ.rFP + Ox[:, :, n]' * rFPW) + OxW[:, :, n]' * ψ.R * ψ.rFP +
-                Ox[:, :, n]' * dR * ψ.rFP + Ox[:, :, n]' * ψ.R * rFPW
+        sum .+= -ψL.R * (OxW[:, :, n]' * ψR.rFP + Ox[:, :, n]' * rFPW) + OxW[:, :, n]' * ψR.R * ψR.rFP +
+                Ox[:, :, n]' * dR * ψR.rFP + Ox[:, :, n]' * ψL.R * rFPW
         for m in 1:n-1
-            sum .+= binomial(n, m) * (-ψ.R * (OxW[:, :, m]' * ρx[:, :, n-m] + Ox[:, :, m]' * ρxW[:, :, n-m]) +
-                                      OxW[:, :, m]' * ψ.R * ρx[:, :, n-m] + Ox[:, :, m]' * dR * ρx[:, :, n-m] +
-                                      Ox[:, :, m]' * ψ.R * ρxW[:, :, n-m])
+            sum .+= binomial(n, m) * (-ψL.R * (OxW[:, :, m]' * ρx[:, :, n-m] + Ox[:, :, m]' * ρxW[:, :, n-m]) +
+                                      OxW[:, :, m]' * ψR.R * ρx[:, :, n-m] + Ox[:, :, m]' * dR * ρx[:, :, n-m] +
+                                      Ox[:, :, m]' * ψL.R * ρxW[:, :, n-m])
         end
         sum .+= dR * ρx[:, :, n]
 
         if n == 1
             sum .+= n * j * rFPW
         else
-            sum .+= n * j * (OxW[:, :, n-1]' * ψ.rFP + Ox[:, :, n-1]' * rFPW)
+            sum .+= n * j * (OxW[:, :, n-1]' * ψR.rFP + Ox[:, :, n-1]' * rFPW)
         end
         for m in 1:n-2
             sum .+= n * j * binomial(n - 1, m) * (OxW[:, :, m]' * ρx[:, :, n-1-m] + Ox[:, :, m]' * ρxW[:, :, n-1-m])
@@ -93,98 +102,107 @@ function ϕnH(ψ::LeftGaugedRCMPS, n::Int64, k::Float64, solρ, solO, W::Array{C
             sum .+= n * j * ρxW[:, :, n-1]
         end
 
-        sum -= VEV * W * ψ.rFP
+        sum -= (VEVR + VEVL) / 2 * W * ψR.rFP
         return sum
     end
     # println("ee = $ee")
     return M
 end
 
-function aZH(ψ::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2})
-    rFPW = solveFPW(ψ, k, W)
-    dim = (bonddim(ψ), bonddim(ψ), 3)
+aZH(ψ::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2}) = aZH(ψ, ψ, k, solρ, solO, W)
 
-    dQ = -ψ.R' * W
+function aZH(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2})
+    rFPW = solveFPW(ψL, ψR, k, W)
+    dim = (bonddim(ψR), bonddim(ψR), 3)
+
+    dQ = -ψL.R' * W
     dR = W
-    A = ψ.R
+    AL = ψL.R
+    AR = ψR.R
     dA = W
-    #Q, R, A, FP, dims, dQ, dR, FPW, dA, k, solρ = p
-    solρW, solOW = integrateSol(a11Wsys!, dim, (ψ.Q, ψ.R, A, ψ.rFP, dim, dQ, dR, rFPW, dA, k, solρ), (ψ.Q', ψ.R', A', ψ.lFP, dim, dQ', dR', 0 * rFPW, dA', k, solO))
+    #QL, RL, AL, QR, RR, AR, FP, dims, dQ, dR, dAL, dAR, FPW, k, solρ = p
+    solρW, solOW = integrateSol(a11Wsys!, dim, (ψL.Q, ψL.R, AL, ψR.Q, ψR.R, AR, ψR.rFP, dim, dQ, dR, dA, rFPW, k, solρ), (ψR.Q', ψR.R', AR', ψL.Q', ψL.R', AL', ψL.lFP, dim, dQ', dR', dA', 0 * rFPW, k, solO))
 
-    # return solρW, solOW
-    VEV = tr(view(reshape(solρ(integration_limit), dim), :, :, 3))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
-        sum = zero(ψ.K)
+    VEVR = tr(view(reshape(solρ(integration_limit), dim), :, :, 3))
+    VEVL = tr(view(reshape(solO(integration_limit), dim), :, :, 3)' * ψL.rFP)
+
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
+        sum = zero(ψL.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
         ρxW = reshape(solρW(x), dim)
         OxW = reshape(solOW(-x), dim)
         j = J(x)
 
-        sum .+= -ψ.R * (OxW[:, :, 3]' * ψ.rFP + Ox[:, :, 3]' * rFPW +
-                        OxW[:, :, 2]' * ρx[:, :, 1] + Ox[:, :, 2]' * ρxW[:, :, 1] +
-                        OxW[:, :, 1]' * ρx[:, :, 2] + Ox[:, :, 1]' * ρxW[:, :, 2] +
-                        ρxW[:, :, 3])
-        sum .+= OxW[:, :, 3]' * ψ.R * ψ.rFP + Ox[:, :, 3]' * dR * ψ.rFP + Ox[:, :, 3]' * ψ.R * rFPW +
-                OxW[:, :, 2]' * ψ.R * ρx[:, :, 1] + Ox[:, :, 2]' * dR * ρx[:, :, 1] + Ox[:, :, 2]' * ψ.R * ρxW[:, :, 1] +
-                OxW[:, :, 1]' * ψ.R * ρx[:, :, 2] + Ox[:, :, 1]' * dR * ρx[:, :, 2] + Ox[:, :, 1]' * ψ.R * ρxW[:, :, 2] +
-                dR * ρx[:, :, 3] + ψ.R * ρxW[:, :, 3]
-        sum .+= j * (OxW[:, :, 2]' * ψ.rFP + Ox[:, :, 2]' * rFPW +
+        sum .+= -ψL.R * (OxW[:, :, 3]' * ψR.rFP + Ox[:, :, 3]' * rFPW +
+                         OxW[:, :, 2]' * ρx[:, :, 1] + Ox[:, :, 2]' * ρxW[:, :, 1] +
+                         OxW[:, :, 1]' * ρx[:, :, 2] + Ox[:, :, 1]' * ρxW[:, :, 2] +
+                         ρxW[:, :, 3])
+        sum .+= OxW[:, :, 3]' * ψR.R * ψR.rFP + Ox[:, :, 3]' * dR * ψR.rFP + Ox[:, :, 3]' * ψL.R * rFPW +
+                OxW[:, :, 2]' * ψR.R * ρx[:, :, 1] + Ox[:, :, 2]' * dR * ρx[:, :, 1] + Ox[:, :, 2]' * ψL.R * ρxW[:, :, 1] +
+                OxW[:, :, 1]' * ψR.R * ρx[:, :, 2] + Ox[:, :, 1]' * dR * ρx[:, :, 2] + Ox[:, :, 1]' * ψL.R * ρxW[:, :, 2] +
+                dR * ρx[:, :, 3] + ψL.R * ρxW[:, :, 3]
+        sum .+= j * (OxW[:, :, 2]' * ψR.rFP + Ox[:, :, 2]' * rFPW +
                      ρxW[:, :, 2])
 
-        sum -= VEV * W * ψ.rFP
+        sum -= (VEVR + VEVL) / 2 * W * ψR.rFP
         return sum
     end
-    # println("ee = $ee")
+
     return M
 end
 
-function aYH(ψ::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2})
-    rFPW = solveFPW(ψ, k, W)
-    dim = (bonddim(ψ), bonddim(ψ), 3)
+aYH(ψ::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2}) = aYH(ψ, ψ, k, solρ, solO, W)
 
-    dQ = -ψ.R' * W
+function aYH(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, k::Float64, solρ, solO, W::Array{ComplexF64,2})
+    rFPW = solveFPW(ψL, ψR, k, W)
+    dim = (bonddim(ψR), bonddim(ψR), 3)
+
+    dQ = -ψL.R' * W
     dR = W
-    A = CC(ψ.Q, ψ.R)
-    dA = -CC(ψ.R' * W, ψ.R) + CC(ψ.Q, W) - im * k * dR
-    #Q, R, A, FP, dims, dQ, dR, FPW, dA, k, solρ = p
-    solρW, solOW = integrateSol(a11Wsys!, dim, (ψ.Q, ψ.R, A, ψ.rFP, dim, dQ, dR, rFPW, dA, k, solρ), (ψ.Q', ψ.R', A', ψ.lFP, dim, dQ', dR', 0 * rFPW, dA', k, solO))
+    AL = CC(ψL.Q, ψL.R)
+    AR = CC(ψR.Q, ψR.R)
+    dA = -(ψL.R' * W * ψR.R - ψL.R * ψL.R' * W) + (ψL.Q * W - W * ψR.Q) - im * k * dR
 
-    # return solρW, solOW
-    VEV = tr(view(reshape(solρ(integration_limit), dim), :, :, 3))
+    solρW, solOW = integrateSol(a11Wsys!, dim,
+        (ψL.Q, ψL.R, AL, ψR.Q, ψR.R, AR, ψR.rFP, dim, dQ, dR, dA, rFPW, k, solρ),
+        (ψR.Q', ψR.R', AR', ψL.Q', ψL.R', AL', ψL.lFP, dim, dQ', dR', dA', 0 * rFPW, k, solO))
 
-    M, ee = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
-        sum = zero(ψ.K)
+    VEVR = tr(view(reshape(solρ(integration_limit), dim), :, :, 3))
+    VEVL = tr(view(reshape(solO(integration_limit), dim), :, :, 3)' * ψL.rFP)
+
+    M, _ = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
+        sum = zero(ψL.K)
         ρx = reshape(solρ(x), dim)
         Ox = reshape(solO(-x), dim)
         ρxW = reshape(solρW(x), dim)
         OxW = reshape(solOW(-x), dim)
         j = J(x)
 
-        sum .+= -ψ.R * (OxW[:, :, 3]' * ψ.rFP + Ox[:, :, 3]' * rFPW +
-                        OxW[:, :, 2]' * ρx[:, :, 1] + Ox[:, :, 2]' * ρxW[:, :, 1] +
-                        OxW[:, :, 1]' * ρx[:, :, 2] + Ox[:, :, 1]' * ρxW[:, :, 2] +
-                        ρxW[:, :, 3])
-        sum .+= OxW[:, :, 3]' * ψ.R * ψ.rFP + Ox[:, :, 3]' * dR * ψ.rFP + Ox[:, :, 3]' * ψ.R * rFPW +
-                OxW[:, :, 2]' * ψ.R * ρx[:, :, 1] + Ox[:, :, 2]' * dR * ρx[:, :, 1] + Ox[:, :, 2]' * ψ.R * ρxW[:, :, 1] +
-                OxW[:, :, 1]' * ψ.R * ρx[:, :, 2] + Ox[:, :, 1]' * dR * ρx[:, :, 2] + Ox[:, :, 1]' * ψ.R * ρxW[:, :, 2] +
-                dR * ρx[:, :, 3] + ψ.R * ρxW[:, :, 3]
-        sum .+= j * (CC(ψ.Q', OxW[:, :, 2]' * ψ.rFP + Ox[:, :, 2]' * rFPW) - ψ.R * CC(OxW[:, :, 2]' * ψ.rFP + Ox[:, :, 2]' * rFPW, ψ.R') +
-                     CC(ψ.Q', ρxW[:, :, 2]) - ψ.R * CC(ρxW[:, :, 2], ψ.R'))
-        sum .+= im * k * j * (OxW[:, :, 2]' * ψ.rFP + Ox[:, :, 2]' * rFPW + ρxW[:, :, 2])
+        sum .+= -ψL.R * (OxW[:, :, 3]' * ψR.rFP + Ox[:, :, 3]' * rFPW +
+                         OxW[:, :, 2]' * ρx[:, :, 1] + Ox[:, :, 2]' * ρxW[:, :, 1] +
+                         OxW[:, :, 1]' * ρx[:, :, 2] + Ox[:, :, 1]' * ρxW[:, :, 2] +
+                         ρxW[:, :, 3])
+        sum .+= OxW[:, :, 3]' * ψR.R * ψR.rFP + Ox[:, :, 3]' * dR * ψR.rFP + Ox[:, :, 3]' * ψL.R * rFPW +
+                OxW[:, :, 2]' * ψR.R * ρx[:, :, 1] + Ox[:, :, 2]' * dR * ρx[:, :, 1] + Ox[:, :, 2]' * ψL.R * ρxW[:, :, 1] +
+                OxW[:, :, 1]' * ψR.R * ρx[:, :, 2] + Ox[:, :, 1]' * dR * ρx[:, :, 2] + Ox[:, :, 1]' * ψL.R * ρxW[:, :, 2] +
+                dR * ρx[:, :, 3] + ψL.R * ρxW[:, :, 3]
+        sum .+= j * ((ψL.Q' * (OxW[:, :, 2]' * ψR.rFP + Ox[:, :, 2]' * rFPW) - (OxW[:, :, 2]' * ψR.rFP + Ox[:, :, 2]' * rFPW) * ψR.Q') -
+                     ψL.R * ((OxW[:, :, 2]' * ψR.rFP + Ox[:, :, 2]' * rFPW) * ψR.R' - ψL.R' * (OxW[:, :, 2]' * ψR.rFP + Ox[:, :, 2]' * rFPW)) +
+                     (ψL.Q' * ρxW[:, :, 2] - ρxW[:, :, 2] * ψR.Q') - ψL.R * (ρxW[:, :, 2] * ψR.R' - ψL.R' * ρxW[:, :, 2]))
+        sum .+= im * k * j * (OxW[:, :, 2]' * ψR.rFP + Ox[:, :, 2]' * rFPW + ρxW[:, :, 2])
 
-        sum -= VEV * W * ψ.rFP
+        sum -= (VEVR + VEVL) / 2 * W * ψR.rFP
         return sum
     end
-    # println("ee = $ee")
     return M
 end
 
 
 function expϕWsys!(du, u, p, x, affine=true)
-    Q, R, β, dims, dQ, dR, k, solρ = p
-    expϕsys!(du, u, (Q, R, β, dims), x, affine)
+    QL, RL, QR, RR, β, dims, dQ, dR, k, solρ = p
+    expϕsys!(du, u, (QL, RL, QR, RR, β, dims), x, affine)
 
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
@@ -194,23 +212,26 @@ function expϕWsys!(du, u, p, x, affine=true)
     if affine
         ρ0 = reshape(solρ(x), dims)
         j = J(x)
-        dρ[:, :] .+= dQ * ρ0[:, :] + dR * ρ0[:, :] * R' + im * β * j * dR * ρ0[:, :]
+        dρ[:, :] .+= dQ * ρ0[:, :] + dR * ρ0[:, :] * RR' + im * β * j * dR * ρ0[:, :]
     end
 
     nothing
 end
 
-function expϕH(ψ::LeftGaugedRCMPS, β::Float64, k::Float64, solρ, solO, W::Array{ComplexF64,2})
-    rFPW = solveFPW(ψ, k, W)
+expϕH(ψL::LeftGaugedRCMPS, β::Float64, k::Float64, solρ, solO, W::Array{ComplexF64,2}) = expϕH(ψL, ψL, β, k, solρ, solO, W)
 
-    dim = (bonddim(ψ), bonddim(ψ))
+function expϕH(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, β::Float64, k::Float64, solρ, solO, W::Array{ComplexF64,2})
+    rFPW = solveFPW(ψL, ψR, k, W)
 
-    dQ = -ψ.R' * W
+    dim = (bonddim(ψR), bonddim(ψR))
+
+    dQ = -ψL.R' * W
     dR = W
 
-    solρW, solOW = integrateSol(expϕWsys!, dim, (ψ.Q, ψ.R, β, dim, dQ, dR, k, solρ), (ψ.Q', ψ.R', -β, dim, dQ', dR', k, solO), rFPW)
+    solρW, solOW = integrateSol(expϕWsys!, dim, (ψL.Q, ψL.R, ψR.Q, ψR.R, β, dim, dQ, dR, k, solρ), (ψR.Q', ψR.R', ψL.Q', ψL.R', -β, dim, dQ', dR', k, solO), rFPW)
 
-    VEV = tr(view(reshape(solρ(integration_limit), dim), :, :))
+    VEVR = tr(view(reshape(solρ(integration_limit), dim), :, :))
+    VEVL = tr(view(reshape(solO(integration_limit), dim), :, :)' * ψL.rFP)
 
     M, _ = quadde(-integration_limit, 0, integration_limit; rtol=int_tol) do x
         ρx = reshape(solρ(x), dim)
@@ -219,8 +240,9 @@ function expϕH(ψ::LeftGaugedRCMPS, β::Float64, k::Float64, solρ, solO, W::Ar
         OxW = reshape(solOW(-x), dim)
         j = J(x)
 
-        return -ψ.R * OxW' * ρx - ψ.R * Ox' * ρxW + OxW' * ψ.R * ρx + Ox' * dR * ρx + Ox' * ψ.R * ρxW +
-               +im * β * j * (OxW' * ρx + Ox' * ρxW) - VEV * W * ψ.rFP
+        return -ψL.R * OxW' * ρx - ψL.R * Ox' * ρxW + OxW' * ψR.R * ρx + Ox' * dR * ρx + Ox' * ψL.R * ρxW +
+               +im * β * j * (OxW' * ρx + Ox' * ρxW) -
+               (VEVR + VEVL) / 2 * W * ψR.rFP
     end
 
     return M

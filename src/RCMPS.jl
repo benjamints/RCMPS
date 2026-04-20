@@ -16,7 +16,7 @@ export ϕnsys!, ϕnWsys!, a11sys!, a11Wsys!, expϕsys!, expϕWsys!
 export ϕnVEV, ϕnDer, a11VEV, aZDer, aYDer, expϕVEV, expϕDer
 export ϕnH, aZH, aYH, expϕH
 
-const integration_limit = 25
+const integration_limit = 25.
 const ode_tol = 1e-12
 const int_tol = 1e-10
 
