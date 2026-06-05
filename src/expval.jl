@@ -4,13 +4,26 @@ function ϕnsys!(du, u, p, x, affine=true)
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
     j = J(x)
+    tmp = similar(view(ρ, :, :, 1))
 
     for n in axes(ρ, 3)
-        dρ[:, :, n] .= QL * ρ[:, :, n] + ρ[:, :, n] * QR' + RL * ρ[:, :, n] * RR'
+        dρn = view(dρ, :, :, n)
+        ρn = view(ρ, :, :, n)
+        # dρ[:, :, n] .= QL * ρ[:, :, n] + ρ[:, :, n] * QR' + RL * ρ[:, :, n] * RR'
+        mul!(dρn, QL, ρn)
+        mul!(dρn, ρn, QR', 1.0, 1.0)
+        mul!(tmp, ρn, RR')
+        mul!(dρn, RL, tmp, 1.0, 1.0)
+
         if n == 1 && affine
-            dρ[:, :, n] .+= j * (RL * FP + FP * RR')
+            # dρ[:, :, n] .+= j * (RL * FP + FP * RR')
+            mul!(dρn, RL, FP, j, 1.0)
+            mul!(dρn, FP, RR', j, 1.0)
         elseif n > 1
-            dρ[:, :, n] .+= n * j * (RL * ρ[:, :, n-1] + ρ[:, :, n-1] * RR')
+            # dρ[:, :, n] .+= n * j * (RL * ρ[:, :, n-1] + ρ[:, :, n-1] * RR')
+            ρnm1 = view(ρ, :, :, n - 1)
+            mul!(dρn, RL, ρnm1, n * j, 1.0)
+            mul!(dρn, ρnm1, RR', n * j, 1.0)
         end
     end
     nothing
@@ -73,15 +86,26 @@ function a11sys!(du, u, p, x, affine=true)
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
     j = J(x)
+    tmp = similar(view(ρ, :, :, 1))
 
     for n in 1:3
-        dρ[:, :, n] .= QL * ρ[:, :, n] + ρ[:, :, n] * QR' + RL * ρ[:, :, n] * RR'
+        dρn = view(dρ, :, :, n)
+        ρn = view(ρ, :, :, n)
+        # dρ[:, :, n] .= QL * ρ[:, :, n] + ρ[:, :, n] * QR' + RL * ρ[:, :, n] * RR'
+        mul!(dρn, QL, ρn)
+        mul!(dρn, ρn, QR', 1.0, 1.0)
+        mul!(tmp, ρn, RR')
+        mul!(dρn, RL, tmp, 1.0, 1.0)
         if n == 1 && affine
-            dρ[:, :, n] .+= j * FP * AR'
+            # dρ[:, :, n] .+= j * FP * AR'
+            mul!(dρn, FP, AR', j, 1.0)
         elseif n == 2 && affine
-            dρ[:, :, n] .+= j * AL * FP
+            # dρ[:, :, n] .+= j * AL * FP
+            mul!(dρn, AL, FP, j, 1.0)
         elseif n > 2
-            dρ[:, :, n] .+= j * AL * ρ[:, :, 1] + j * ρ[:, :, 2] * AR'
+            # dρ[:, :, n] .+= j * AL * ρ[:, :, 1] + j * ρ[:, :, 2] * AR'
+            mul!(dρn, AL, view(ρ, :, :, 1), j, 1.0)
+            mul!(dρn, view(ρ, :, :, 2), AR', j, 1.0)
         end
     end
     nothing
@@ -157,9 +181,16 @@ function expϕsys!(du, u, p, x, affine=true)
     dρ = reshape(du, dims)
     ρ = reshape(u, dims)
     j = J(x)
+    tmp = similar(ρ)
 
-    dρ[:, :] .= QL * ρ[:, :] + ρ[:, :] * QR' + RL * ρ[:, :] * RR' +
-                im * β * j * (RL * ρ[:, :] + ρ[:, :] * RR')
+    # dρ[:, :] .= QL * ρ[:, :] + ρ[:, :] * QR' + RL * ρ[:, :] * RR' +
+    #             im * β * j * (RL * ρ[:, :] + ρ[:, :] * RR')
+    mul!(dρ, QL, ρ)
+    mul!(dρ, ρ, QR', 1.0, 1.0)
+    mul!(tmp, RL, ρ)
+    mul!(dρ, tmp, RR', 1.0, 1.0)
+    mul!(dρ, RL, ρ, im * β * j, 1.0)
+    mul!(dρ, ρ, RR', im * β * j, 1.0)
 
     nothing
 end

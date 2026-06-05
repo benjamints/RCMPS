@@ -45,11 +45,11 @@ function a11Wsys!(du, u, p, x, affine=true)
     nothing
 end
 
-solveFPW(ψL::LeftGaugedRCMPS, k, W::Array{ComplexF64,2}) = solveFPW(ψL, ψL, k, W, true)
+solveFPW(ψL::LeftGaugedRCMPS, k, W::Array{ComplexF64,2}) = solveFPW(ψL, ψL, k, W)
 
-function solveFPW(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, k, W::Array{ComplexF64,2}, reg=false)
+function solveFPW(ψL::LeftGaugedRCMPS, ψR::LeftGaugedRCMPS, k, W::Array{ComplexF64,2})
     b = ψL.R' * W * ψR.rFP - W * ψR.rFP * ψR.R'
-    if reg
+    if ψL === ψR
         rFPW, _ = linsolve(u -> ψL.Q * u + u * ψR.Q' + ψL.R * u * ψR.R' - im * k * u + ψL.rFP * tr(u), b)
     else
         rFPW, _ = linsolve(u -> ψL.Q * u + u * ψR.Q' + ψL.R * u * ψR.R' - im * k * u, b)
